@@ -71,11 +71,11 @@
 /*!
         @brief class to control OLED and define buffer
 */
-class SSD1306
+class BaseSSD1306
 {
   public:
-    SSD1306() = default;
-    ~SSD1306() {};
+    BaseSSD1306() = default;
+    ~BaseSSD1306() {};
 
     auto OLEDupdate() -> bool;
     void OLEDclearBuffer(void);
@@ -97,8 +97,12 @@ class SSD1306
     void setMainText(const std::string &text) { _mainText = text; };
     void setBatteryCharging(bool on) { _batteryCharging = on; };
 
+  protected:
+    virtual auto _writeData(const uint8_t *data, size_t length) -> ssize_t = 0;
+
   private:
-    auto _writeData(const uint8_t *data, size_t length) -> ssize_t;
+    friend class MockedSSD1306;
+    friend class SSD1306;
     void _writeText2Buffer(int startIndex, const std::string &text, int maxLength = -1);
     std::string _topText;       /**< Text to display at the top of the OLED screen */
     int _maxTopTextLength = 10; /**< Maximum length of the top text */
@@ -133,6 +137,13 @@ class SSD1306
     uint8_t _OLED_PAGE_NUM = (_OLED_HEIGHT / 8); /**< Number of byte size pages OLED screen is divided into */
 
     std::vector<uint8_t> _OLEDbuffer;
+    bool _ready = false;
+};
+
+class SSD1306 : public BaseSSD1306
+{
+  protected:
+    auto _writeData(const uint8_t *data, size_t length) -> ssize_t override;
 };
 
 static inline const std::array<std::array<uint8_t, 8>, 1327> characters = {{

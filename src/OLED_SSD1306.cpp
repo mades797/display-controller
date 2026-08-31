@@ -17,7 +17,6 @@
 #include <iostream>
 #include <iterator>
 #include <linux/i2c-dev.h>
-#include <pybind11/pybind11.h>
 #include <span>
 #include <string>
 #include <sys/ioctl.h>
@@ -75,7 +74,7 @@ auto SSD1306::_writeData(const uint8_t *data, size_t length) -> ssize_t
  * @param command Command opcode to send to the display controller.
  * @return true if both bytes were written successfully, false otherwise.
  */
-auto SSD1306::OLEDSendCommand(uint8_t command) -> bool
+auto BaseSSD1306::OLEDSendCommand(uint8_t command) -> bool
 {
     const std::array<uint8_t, 2> buffer = {SSD1306_COMMAND, command};
     return (_writeData(buffer.begin(), buffer.size()) == buffer.size());
@@ -90,16 +89,20 @@ auto SSD1306::OLEDSendCommand(uint8_t command) -> bool
  *
  * @return true if the buffer was written successfully, false otherwise.
  */
-auto SSD1306::OLEDupdate() -> bool
+auto BaseSSD1306::OLEDupdate() -> bool
 {
-    buildBuffer(); // Build the buffer with the current text
-    std::vector<uint8_t> buffer;
-    buffer.reserve(_OLEDbuffer.size() + 1);
+    if (_ready)
+    {
+        buildBuffer(); // Build the buffer with the current text
+        std::vector<uint8_t> buffer;
+        buffer.reserve(_OLEDbuffer.size() + 1);
 
-    // Control Byte 0x40 means "all following bytes are pixel RAM data"
-    buffer.push_back(SSD1306_DATA_CONTINUE);
-    buffer.insert(buffer.end(), _OLEDbuffer.begin(), _OLEDbuffer.end());
-    return (_writeData(buffer.data(), buffer.size()) == static_cast<ssize_t>(buffer.size()));
+        // Control Byte 0x40 means "all following bytes are pixel RAM data"
+        buffer.push_back(SSD1306_DATA_CONTINUE);
+        buffer.insert(buffer.end(), _OLEDbuffer.begin(), _OLEDbuffer.end());
+        return (_writeData(buffer.data(), buffer.size()) == static_cast<ssize_t>(buffer.size()));
+    }
+    return false;
 }
 
 /**
@@ -113,7 +116,7 @@ auto SSD1306::OLEDupdate() -> bool
  * @return true if every initialization command was sent successfully,
  *         false if any command failed.
  */
-auto SSD1306::begin() -> bool
+auto BaseSSD1306::begin() -> bool
 {
     bool result = OLEDSendCommand(SSD1306_DISPLAY_OFF);         // Display OFF
     result &= OLEDSendCommand(SSD1306_MEMORY_ADDR_MODE);        // Set Memory Addressing Mode
@@ -125,7 +128,8 @@ auto SSD1306::begin() -> bool
     result &= OLEDSendCommand(SSD1306_SET_START_PAGE);          // start page = 0
     result &= OLEDSendCommand(SSD1306_SET_END_PAGE);            // end page = 7
     result &= OLEDSendCommand(SSD1306_DISPLAY_ON);              // display on
-    OLEDupdate();                                               // Update the display with the cleared buffer
+    _ready = true;
+    OLEDupdate(); // Update the display with the cleared buffer
     return result;
 }
 
@@ -143,7 +147,7 @@ auto SSD1306::begin() -> bool
  *                    non-positive value (the default, -1) means
  *                    no limit.
  */
-void SSD1306::_writeText2Buffer(int startIndex, const std::string &text, int maxLength /* = -1 */)
+void BaseSSD1306::_writeText2Buffer(int startIndex, const std::string &text, int maxLength /* = -1 */)
 {
     int offset = startIndex; // NOLINT(misc-const-correctness)
     for (const auto character : text)
@@ -174,7 +178,7 @@ void SSD1306::_writeText2Buffer(int startIndex, const std::string &text, int max
  * After this call, _OLEDbuffer holds the complete frame ready to be
  * sent to the display via OLEDupdate().
  */
-void SSD1306::buildBuffer()
+void BaseSSD1306::buildBuffer()
 {
     _OLEDbuffer.clear();
     _OLEDbuffer.resize((_OLED_WIDTH * _OLED_HEIGHT) / CHAR_LENGTH, 0x00); // 128x64 / 8 = 1024 bytes
@@ -229,24 +233,3 @@ void SSD1306::buildBuffer()
     }
     _writeText2Buffer(_mainTextStartPage * CHAR_LENGTH, _mainText);
 }
-
-// NOLINTBEGIN
-namespace py = pybind11;
-
-// Use the macro to define the Python module and expose the class
-PYBIND11_MODULE(display_controller, module)
-{
-    module.doc() = "Display controller";
-
-    // Bind the Calculator class
-    py::class_<SSD1306>(module, "SSD1306")
-        .def(py::init()) // Binds the constructor
-        .def("begin", &SSD1306::begin, "Begin the display controller")
-        .def("set_top_text", &SSD1306::setTopText, "Set the display top text")
-        .def("set_battery_charge", &SSD1306::setBatteryCharge, "Set the battery charge level (0-100)")
-        .def("set_network_off", &SSD1306::setNetworkSymbolOff, "Enable the network off flag")
-        .def("set_main_text", &SSD1306::setMainText, "Set the display main text")
-        .def("set_battery_charging", &SSD1306::setBatteryCharging, "Set the battery charging flag")
-        .def("update", &SSD1306::OLEDupdate, "Update the display");
-}
-// NOLINTEND
