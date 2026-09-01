@@ -118,19 +118,23 @@ auto BaseSSD1306::OLEDupdate() -> bool
  */
 auto BaseSSD1306::begin() -> bool
 {
-    bool result = OLEDSendCommand(SSD1306_DISPLAY_OFF);         // Display OFF
-    result &= OLEDSendCommand(SSD1306_MEMORY_ADDR_MODE);        // Set Memory Addressing Mode
-    result &= OLEDSendCommand(SSD1306_HORIZONTAL_ADDRESS_MODE); // 0x00 = Horizontal Addressing Mode
-    result &= OLEDSendCommand(SSD1306_SET_COLUMN_ADDR);         // set column address range
-    result &= OLEDSendCommand(SSD1306_SET_LOWER_COLUMN);        // start column = 0
-    result &= OLEDSendCommand(SSD1306_SET_END_COLUMN);          // end column = 127
-    result &= OLEDSendCommand(SSD1306_SET_PAGE_ADDR);           // set page address range
-    result &= OLEDSendCommand(SSD1306_SET_START_PAGE);          // start page = 0
-    result &= OLEDSendCommand(SSD1306_SET_END_PAGE);            // end page = 7
-    result &= OLEDSendCommand(SSD1306_DISPLAY_ON);              // display on
-    _ready = true;
-    OLEDupdate(); // Update the display with the cleared buffer
-    return result;
+    if (!_ready)
+    {
+        bool result = OLEDSendCommand(SSD1306_DISPLAY_OFF);         // Display OFF
+        result &= OLEDSendCommand(SSD1306_MEMORY_ADDR_MODE);        // Set Memory Addressing Mode
+        result &= OLEDSendCommand(SSD1306_HORIZONTAL_ADDRESS_MODE); // 0x00 = Horizontal Addressing Mode
+        result &= OLEDSendCommand(SSD1306_SET_COLUMN_ADDR);         // set column address range
+        result &= OLEDSendCommand(SSD1306_SET_LOWER_COLUMN);        // start column = 0
+        result &= OLEDSendCommand(SSD1306_SET_END_COLUMN);          // end column = 127
+        result &= OLEDSendCommand(SSD1306_SET_PAGE_ADDR);           // set page address range
+        result &= OLEDSendCommand(SSD1306_SET_START_PAGE);          // start page = 0
+        result &= OLEDSendCommand(SSD1306_SET_END_PAGE);            // end page = 7
+        result &= OLEDSendCommand(SSD1306_DISPLAY_ON);              // display on
+        _ready = true;
+        OLEDupdate(); // Update the display with the cleared buffer
+        return result;
+    }
+    return true; // Already initialized
 }
 
 /**
