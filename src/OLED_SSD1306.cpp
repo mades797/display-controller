@@ -8,6 +8,7 @@
  */
 
 #include "OLED_SSD1306.hpp"
+#include "characters.hpp"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -28,7 +29,7 @@
 constexpr int CHAR_LENGTH = 8;
 
 /// Offset subtracted from a character's ASCII value to index into the glyph table.
-constexpr int CHAR_INDEX_OFFSET = 31;
+constexpr int CHAR_INDEX_OFFSET = 32;
 
 /// I2C bus address of the SSD1306 display controller.
 constexpr uint8_t I2C_ADDRESS = 0x3C;
@@ -154,12 +155,30 @@ auto BaseSSD1306::begin() -> bool
 void BaseSSD1306::_writeText2Buffer(int startIndex, const std::string &text, int maxLength /* = -1 */)
 {
     int offset = startIndex; // NOLINT(misc-const-correctness)
+    uint8_t utf8_part1 = 0;
+    int char_index = 0;
     for (const auto character : text)
     {
-        const std::span<const uint8_t> charData{characters.at(character - CHAR_INDEX_OFFSET)};
+        if (utf8_part1 != 0)
+        {
+            const uint8_t part2 = static_cast<uint8_t>(character);
+            char_index = ((utf8_part1 & 0x1F) << 6) | (part2 & 0x3F) - CHAR_INDEX_OFFSET;
+            utf8_part1 = 0;
+        }
+        else if (static_cast<int>(character) > 127)
+        {
+            utf8_part1 = static_cast<uint8_t>(character);
+            continue;
+        }
+        else
+        {
+            char_index = static_cast<int>(character) - CHAR_INDEX_OFFSET;
+        }
+        std::vector<uint8_t> charData = characters.at(char_index);
+        charData.push_back(0x00); // Add a blank column for spacing
         std::copy(charData.begin(), charData.end(), std::next(_OLEDbuffer.begin(), offset));
-        offset += CHAR_LENGTH; // Move to the next character position
-        if (maxLength > 0 && offset >= maxLength * CHAR_LENGTH)
+        offset += charData.size(); // Move to the next character position
+        if (maxLength > 0 && offset >= maxLength)
         {
             break; // Stop if we reach the maximum length
         }

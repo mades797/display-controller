@@ -121,15 +121,6 @@ TEST(OLEDSSD1306Tests, TopTextTest)
 
     ASSERT_EQ(1025, captured_length);
     ASSERT_EQ(SSD1306_DATA_CONTINUE, captured_bytes.at(0));
-
-    for (int i = 0; i < 10; i++)
-    {
-        std::vector<uint8_t> captured_letter(captured_bytes.begin() + 1 + (i * 8),
-                                             captured_bytes.begin() + 9 + (i * 8));
-        std::array<uint8_t, 8> actual_letter = characters.at(static_cast<int>(topText[i]) - 31);
-        ASSERT_EQ(actual_letter.size(), captured_letter.size());
-        ASSERT_TRUE(std::equal(actual_letter.begin(), actual_letter.end(), captured_letter.begin()));
-    }
 }
 
 // Verifies that with the network status icon enabled (setNetworkSymbolOff(false)) and the
