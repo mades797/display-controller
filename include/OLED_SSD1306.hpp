@@ -68,6 +68,18 @@
 // Delays
 #define SSD1306_INITDELAY 100 /**< Initialisation delay in mS */
 
+enum class NetworkSymbol {
+  HIDDEN,
+  NETWORK_OFF,
+  NETWORK_ON,
+};
+
+enum class BatterySymbol {
+  HIDDEN,
+  NORMAL,
+  UNKOWN,
+};
+
 /*!
         @brief class to control OLED and define buffer
 */
@@ -92,7 +104,7 @@ class BaseSSD1306
     void OLEDContrast(uint8_t OLEDcontrast);
     void OLEDInvert(bool on);
     void setTopText(const std::string &text) { _topText = text; };
-    void setNetworkSymbolOff(bool off) { _networkOff = off; };
+    void setNetworkSymbolOff(bool off);
     void setBatteryCharge(int charge) { _batteryCharge = charge; };
     void setMainText(const std::string &text) { _mainText = text; };
     void setBatteryCharging(bool on) { _batteryCharging = on; };
@@ -104,6 +116,7 @@ class BaseSSD1306
     friend class MockedSSD1306;
     friend class SSD1306;
     void _writeText2Buffer(int startIndex, const std::string &text, int maxLength = -1);
+    void DrawNetworkSymbol();
     std::string _topText;       /**< Text to display at the top of the OLED screen */
     int _maxTopTextLength = 80; /**< Maximum length of the top text */
     int _networkSymbolStartPage = 11;
@@ -112,7 +125,8 @@ class BaseSSD1306
                                       0xFC, 0xFC, 0x00, 0xFF, 0xFF}; /**< Data for the network symbol */
     uint8_t _networkSymbolBarData[12] = {0x01, 0x03, 0x06, 0x0C, 0x18,
                                          0x30, 0x60, 0xC0, 0x80}; /**< Data for the network symbol bars */
-    bool _networkOff = false;                                     /**< Flag to indicate if the network symbol is off */
+    NetworkSymbol _networkSymbol = NetworkSymbol::HIDDEN;       /**< Flag to indicate if the network symbol is off */
+    BatterySymbol _batterySymbol = BatterySymbol::HIDDEN; /**< Flag to indicate if the battery symbol is off */
     int _batterySymbolStartPage = 14;
     uint8_t _emptyBatterySymbolData[16] = {0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81,
                                            0x81, 0x81, 0x81, 0xE7, 0x24, 0x24, 0x1C};

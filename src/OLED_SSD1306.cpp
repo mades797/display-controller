@@ -185,6 +185,30 @@ void BaseSSD1306::_writeText2Buffer(int startIndex, const std::string &text, int
     }
 }
 
+void BaseSSD1306::setNetworkSymbolOff(bool off)
+{
+    off ? _networkSymbol = NetworkSymbol::NETWORK_OFF : _networkSymbol = NetworkSymbol::NETWORK_ON;
+}
+
+void BaseSSD1306::DrawNetworkSymbol()
+{
+    if (_networkSymbol != NetworkSymbol::HIDDEN)
+    {
+        std::vector<uint8_t> networkSymbolData(std::begin(_networkSymbolData), std::end(_networkSymbolData));
+        if (_networkSymbol == NetworkSymbol::NETWORK_OFF)
+        {
+            std::transform(networkSymbolData.begin(), networkSymbolData.end(),
+                        std::begin(_networkSymbolBarData), // Automatically resolves to the array start
+                        networkSymbolData.begin(), [](uint8_t a, uint8_t b) { // NOLINT(readability-identifier-length)
+                            return static_cast<uint8_t>(a | b);               // Keeps bitwise math unsigned
+                        });
+        }
+
+        std::copy(networkSymbolData.begin(), networkSymbolData.end(),
+                std::next(_OLEDbuffer.begin(), static_cast<long>(_networkSymbolStartPage) * CHAR_LENGTH));
+    }
+}
+
 /**
  * @brief Compose the full OLED pixel buffer for the current display state.
  *
@@ -208,18 +232,7 @@ void BaseSSD1306::buildBuffer()
     _writeText2Buffer(0, _topText, _maxTopTextLength);
 
     // Draw network symbol
-    std::vector<uint8_t> networkSymbolData(std::begin(_networkSymbolData), std::end(_networkSymbolData));
-    if (_networkOff)
-    {
-        std::transform(networkSymbolData.begin(), networkSymbolData.end(),
-                       std::begin(_networkSymbolBarData), // Automatically resolves to the array start
-                       networkSymbolData.begin(), [](uint8_t a, uint8_t b) { // NOLINT(readability-identifier-length)
-                           return static_cast<uint8_t>(a | b);               // Keeps bitwise math unsigned
-                       });
-    }
-
-    std::copy(networkSymbolData.begin(), networkSymbolData.end(),
-              std::next(_OLEDbuffer.begin(), static_cast<long>(_networkSymbolStartPage) * CHAR_LENGTH));
+    DrawNetworkSymbol();
 
     // Draw battery symbol
     /// Battery charge converted from a percentage (0-100) to a fill-segment count.
