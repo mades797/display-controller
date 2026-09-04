@@ -75,10 +75,10 @@ auto SSD1306::_writeData(const uint8_t *data, size_t length) -> ssize_t
  * @param command Command opcode to send to the display controller.
  * @return true if both bytes were written successfully, false otherwise.
  */
-auto BaseSSD1306::OLEDSendCommand(uint8_t command) -> bool
+auto BaseSSD1306::OLEDSendCommand(std::vector<uint8_t> command) -> bool
 {
-    const std::array<uint8_t, 2> buffer = {SSD1306_COMMAND, command};
-    return (_writeData(buffer.begin(), buffer.size()) == buffer.size());
+    command.insert(command.begin(), SSD1306_COMMAND); // Prepend the command control byte
+    return (_writeData(command.data(), command.size()) == command.size());
 }
 
 /**
@@ -121,16 +121,19 @@ auto BaseSSD1306::begin() -> bool
 {
     if (!_ready)
     {
-        bool result = OLEDSendCommand(SSD1306_DISPLAY_OFF);         // Display OFF
-        result &= OLEDSendCommand(SSD1306_MEMORY_ADDR_MODE);        // Set Memory Addressing Mode
-        result &= OLEDSendCommand(SSD1306_HORIZONTAL_ADDRESS_MODE); // 0x00 = Horizontal Addressing Mode
-        result &= OLEDSendCommand(SSD1306_SET_COLUMN_ADDR);         // set column address range
-        result &= OLEDSendCommand(SSD1306_SET_LOWER_COLUMN);        // start column = 0
-        result &= OLEDSendCommand(SSD1306_SET_END_COLUMN);          // end column = 127
-        result &= OLEDSendCommand(SSD1306_SET_PAGE_ADDR);           // set page address range
-        result &= OLEDSendCommand(SSD1306_SET_START_PAGE);          // start page = 0
-        result &= OLEDSendCommand(SSD1306_SET_END_PAGE);            // end page = 7
-        result &= OLEDSendCommand(SSD1306_DISPLAY_ON);              // display on
+        bool result = OLEDSendCommand(SSD1306_DISPLAY_OFF);
+        result &= OLEDSendCommand(SSD1306_HORIZONTAL_ADDRESS_MODE);
+        result &= OLEDSendCommand(SSD1306_SET_CONTRAST_CONTROL);
+        result &= OLEDSendCommand(SSD1306_SEGMENT_REMAP);
+        result &= OLEDSendCommand(SSD1306_NORMAL_DISPLAY);
+        result &= OLEDSendCommand(SSD1306_COM_SCAN_DIR_DEC);
+        result &= OLEDSendCommand(SSD1306_MULTIPLEX_RATIO);
+        result &= OLEDSendCommand(SSD1306_SET_DISPLAY_CLOCK_DIV_RATIO);
+        result &= OLEDSendCommand(SSD1306_SET_PRECHARGE_PERIOD);
+        result &= OLEDSendCommand(SSD1306_SET_COM_PINS);
+        result &= OLEDSendCommand(SSD1306_SET_VCOM_DESELECT);
+        result &= OLEDSendCommand(SSD1306_CHARGE_PUMP);
+        result &= OLEDSendCommand(SSD1306_DISPLAY_ON);
         _ready = true;
         OLEDupdate(); // Update the display with the cleared buffer
         return result;
@@ -190,6 +193,12 @@ void BaseSSD1306::setNetworkSymbolOff(bool off)
     off ? _networkSymbol = NetworkSymbol::NETWORK_OFF : _networkSymbol = NetworkSymbol::NETWORK_ON;
 }
 
+void BaseSSD1306::setBatteryCharge(int charge)
+{
+    _batteryCharge = charge;
+    _batterySymbol = BatterySymbol::NORMAL; // Set the battery symbol to NORMAL when charge is set
+}
+
 void BaseSSD1306::DrawNetworkSymbol()
 {
     if (_networkSymbol != NetworkSymbol::HIDDEN)
@@ -198,14 +207,49 @@ void BaseSSD1306::DrawNetworkSymbol()
         if (_networkSymbol == NetworkSymbol::NETWORK_OFF)
         {
             std::transform(networkSymbolData.begin(), networkSymbolData.end(),
-                        std::begin(_networkSymbolBarData), // Automatically resolves to the array start
-                        networkSymbolData.begin(), [](uint8_t a, uint8_t b) { // NOLINT(readability-identifier-length)
-                            return static_cast<uint8_t>(a | b);               // Keeps bitwise math unsigned
-                        });
+                           std::begin(_networkSymbolBarData), // Automatically resolves to the array start
+                           networkSymbolData.begin(),
+                           [](uint8_t a, uint8_t b) {              // NOLINT(readability-identifier-length)
+                               return static_cast<uint8_t>(a | b); // Keeps bitwise math unsigned
+                           });
         }
 
         std::copy(networkSymbolData.begin(), networkSymbolData.end(),
-                std::next(_OLEDbuffer.begin(), static_cast<long>(_networkSymbolStartPage) * CHAR_LENGTH));
+                  std::next(_OLEDbuffer.begin(), static_cast<long>(_networkSymbolStartPage) * CHAR_LENGTH));
+    }
+}
+
+void BaseSSD1306::DrawBatterySymbol()
+{
+    if (_batterySymbol != BatterySymbol::HIDDEN)
+    {
+        // Draw battery symbol
+        /// Battery charge converted from a percentage (0-100) to a fill-segment count.
+        const long batteryCharge =
+            std::lround(static_cast<float>(_batteryCharge) /
+                        10.0F); // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+
+        std::vector<uint8_t> batterySymbolData(std::begin(_emptyBatterySymbolData), std::end(_emptyBatterySymbolData));
+
+        const uint8_t batteryFillMask = 0xFF;
+        for (int i = 0; i < batteryCharge && i < _batteryFillLength; ++i)
+        {
+            batterySymbolData[i + 1] |= batteryFillMask; // Fill the battery from right to left
+        }
+        const uint8_t batterTipMask = 0x3C;
+        constexpr ssize_t batteryTipStart = 11;
+        constexpr ssize_t batteryTipEnd = 13;
+
+        if (_batteryCharge >= _batteryTipThreshold)
+        {
+            for (ssize_t i = batteryTipStart; i <= batteryTipEnd; i++)
+            {
+                batterySymbolData[i] |= batterTipMask;
+            }
+        }
+
+        std::copy(batterySymbolData.begin(), batterySymbolData.end(),
+                  std::next(_OLEDbuffer.begin(), static_cast<long>(_batterySymbolStartPage) * CHAR_LENGTH));
     }
 }
 
@@ -234,33 +278,7 @@ void BaseSSD1306::buildBuffer()
     // Draw network symbol
     DrawNetworkSymbol();
 
-    // Draw battery symbol
-    /// Battery charge converted from a percentage (0-100) to a fill-segment count.
-    const long batteryCharge =
-        std::lround(static_cast<float>(_batteryCharge) /
-                    10.0F); // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
-
-    std::vector<uint8_t> batterySymbolData(std::begin(_emptyBatterySymbolData), std::end(_emptyBatterySymbolData));
-
-    const uint8_t batteryFillMask = 0xFF;
-    for (int i = 0; i < batteryCharge && i < _batteryFillLength; ++i)
-    {
-        batterySymbolData[i + 1] |= batteryFillMask; // Fill the battery from right to left
-    }
-    const uint8_t batterTipMask = 0x3C;
-    constexpr ssize_t batteryTipStart = 11;
-    constexpr ssize_t batteryTipEnd = 13;
-
-    if (_batteryCharge >= _batteryTipThreshold)
-    {
-        for (ssize_t i = batteryTipStart; i <= batteryTipEnd; i++)
-        {
-            batterySymbolData[i] |= batterTipMask;
-        }
-    }
-
-    std::copy(batterySymbolData.begin(), batterySymbolData.end(),
-              std::next(_OLEDbuffer.begin(), static_cast<long>(_batterySymbolStartPage) * CHAR_LENGTH));
+    DrawBatterySymbol();
 
     if (_batteryCharging)
     {
